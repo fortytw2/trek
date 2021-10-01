@@ -1,0 +1,6 @@
+github.com/fortytw2/dockertest v0.0.0-20181228171220-480d52efdffe h1:ZcSBgsXKsiO+Fews6o2FvSJe35heZSNgmoBpU/3QcfU=
+github.com/fortytw2/dockertest v0.0.0-20181228171220-480d52efdffe/go.mod h1:ol2Uw1BXqkhdz68AoQkye2+HtieiGfwXbEOwRTRpOnU=
+github.com/fortytw2/lounge v0.0.0-20210929174603-b7ce694cb600 h1:KyvTnqj+pFkGOJgurGRbnoIo9cMtLFS5BsFPQXqt0ZM=
+github.com/fortytw2/lounge v0.0.0-20210929174603-b7ce694cb600/go.mod h1:UF4a8fQkS6tEHH83nmLd9BXrFRmZmPQAAmogV1irsGU=
+github.com/lib/pq v1.10.2 h1:AqzbZs4ZoCBp+GtejcpCpcxM3zlSMx29dXbUSeVtJb8=
+github.com/lib/pq v1.10.2/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
