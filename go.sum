@@ -4,3 +4,5 @@ github.com/fortytw2/lounge v0.0.0-20210929174603-b7ce694cb600 h1:KyvTnqj+pFkGOJg
 github.com/fortytw2/lounge v0.0.0-20210929174603-b7ce694cb600/go.mod h1:UF4a8fQkS6tEHH83nmLd9BXrFRmZmPQAAmogV1irsGU=
 github.com/lib/pq v1.10.2 h1:AqzbZs4ZoCBp+GtejcpCpcxM3zlSMx29dXbUSeVtJb8=
 github.com/lib/pq v1.10.2/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
+github.com/mattn/go-sqlite3 v1.14.8 h1:gDp86IdQsN/xWjIEmr9MF6o9mpksUgh0fu+9ByFxzIU=
+github.com/mattn/go-sqlite3 v1.14.8/go.mod h1:NyWgC/yNuGj7Q9rpYnZvas74GogHl5/Z4A/KQRfk6bU=

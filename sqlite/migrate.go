@@ -1,29 +1,21 @@
-package sqlitemigrate
+package sqlite
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
-	"net/http"
-	"sort"
-	"strings"
 
 	"github.com/fortytw2/lounge"
-	"github.com/shurcooL/httpfs/vfsutil"
+	"github.com/fortytw2/trek"
 )
 
-func Migrate(db *sql.DB, log lounge.Log, schema http.FileSystem) (err error) {
-	migrations, err := getMigrations(schema)
+func (w *SQLiteWrapper) ApplyMigrations(log lounge.Log, allMigrations []trek.Migration) (err error) {
+	err = verifySystemTables(w.db)
 	if err != nil {
 		return err
 	}
 
-	err = verifySystemTables(db)
-	if err != nil {
-		return err
-	}
-
-	conn, err := db.Conn(context.Background())
+	conn, err := w.db.Conn(context.Background())
 	if err != nil {
 		return err
 	}
@@ -34,7 +26,7 @@ func Migrate(db *sql.DB, log lounge.Log, schema http.FileSystem) (err error) {
 	}
 
 	if !ok {
-		log.Error().Msg("unable to migrate database, lock held on table")
+		log.Errorf("unable to migrate database, lock held on table")
 		return nil
 	}
 
@@ -45,71 +37,28 @@ func Migrate(db *sql.DB, log lounge.Log, schema http.FileSystem) (err error) {
 		}
 	}()
 
-	count, err := countMigrations(conn)
+	latestName, err := getLatestMigrationName(conn)
 	if err != nil {
-		log.Error().Msg(err.Error())
+		log.Errorf(err.Error())
 		return err
 	}
 
+	migrations := trek.GetMigrationsAfter(allMigrations, latestName)
+
 	for i, m := range migrations {
-		// skip running ones we've clearly already ran
-		if count > 0 {
-			count--
-			continue
-		}
-
-		migrationSpl := strings.Split(m.name, "_")
-		if len(migrationSpl) != 2 {
-			// the one case it's ok to bail
-			log.Fatal().Msgf("invalid database migration naming: %s", m.name)
-		}
-
-		log.Info().Msgf("running database migration %d: %s", i, migrationSpl[1])
-		err := runMigration(i, m.sql, conn)
+		log.Infof("running migration %s", m.Name)
+		err := runMigration(i, m.SQL, conn)
 		if err != nil {
-			log.Error().Msg(err.Error())
 			return err
 		}
 
-		err = recordMigration(m.name, conn)
+		err = recordMigration(m.Name, conn)
 		if err != nil {
-			log.Error().Msg(err.Error())
 			return err
 		}
 	}
 
 	return nil
-}
-
-type migration struct {
-	sql  string
-	name string
-}
-
-func getMigrations(schema http.FileSystem) ([]*migration, error) {
-	files, err := vfsutil.ReadDir(schema, "/")
-	if err != nil {
-		return nil, err
-	}
-
-	var m []*migration
-	for _, f := range files {
-		body, err := vfsutil.ReadFile(schema, f.Name())
-		if err != nil {
-			return nil, err
-		}
-
-		m = append(m, &migration{
-			name: f.Name(),
-			sql:  string(body),
-		})
-	}
-
-	sort.Slice(m, func(i, j int) bool {
-		return m[i].name < m[j].name
-	})
-
-	return m, nil
 }
 
 func verifySystemTables(db *sql.DB) error {
@@ -131,16 +80,20 @@ func verifySystemTables(db *sql.DB) error {
 	return err
 }
 
-func countMigrations(db *sql.Conn) (int, error) {
-	row := db.QueryRowContext(context.Background(), `SELECT count(*) FROM migrations;`)
+func getLatestMigrationName(db *sql.Conn) (string, error) {
+	row := db.QueryRowContext(context.Background(), `SELECT name FROM migrations ORDER BY name DESC LIMIT 1;`)
 
-	var count int
-	err := row.Scan(&count)
+	var name string
+	err := row.Scan(&name)
 	if err != nil {
-		return 0, err
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+
+		return "", err
 	}
 
-	return count, nil
+	return name, nil
 }
 
 func runMigration(num int, s string, db *sql.Conn) error {

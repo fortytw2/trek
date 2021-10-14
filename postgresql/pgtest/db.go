@@ -3,14 +3,12 @@ package pgtest
 import (
 	"context"
 	"database/sql"
-	"io/fs"
 	"os"
 	"testing"
 
 	"github.com/fortytw2/dockertest"
 	"github.com/fortytw2/lounge"
 	"github.com/fortytw2/trek/postgresql"
-	"github.com/fortytw2/trek/postgresql/pgmigrate"
 )
 
 type DB struct {
@@ -18,7 +16,7 @@ type DB struct {
 	container *dockertest.Container
 }
 
-func NewDB(t *testing.T, log lounge.Log, schema fs.FS, migrateOpts ...pgmigrate.OptionFn) *DB {
+func NewDB(t *testing.T, log lounge.Log) *DB {
 	existingDSN, useEnvDB := os.LookupEnv("POSTGRES_DSN")
 
 	// may be nil
@@ -27,7 +25,7 @@ func NewDB(t *testing.T, log lounge.Log, schema fs.FS, migrateOpts ...pgmigrate.
 	var db *postgresql.Wrapper
 	var err error
 	if useEnvDB {
-		db, err = postgresql.NewWrapper(existingDSN, log, schema, migrateOpts...)
+		db, err = postgresql.NewWrapper(existingDSN, log)
 		if err != nil {
 			t.Fatalf("%s", err.Error())
 		}
@@ -44,7 +42,7 @@ func NewDB(t *testing.T, log lounge.Log, schema fs.FS, migrateOpts ...pgmigrate.
 			t.Fatalf("%s", err.Error())
 		}
 
-		db, err = postgresql.NewWrapper("postgres://postgres:postgres@"+container.Addr+"?sslmode=disable", log, schema, migrateOpts...)
+		db, err = postgresql.NewWrapper("postgres://postgres:postgres@"+container.Addr+"?sslmode=disable", log)
 		if err != nil {
 			t.Fatalf("%s", err.Error())
 		}

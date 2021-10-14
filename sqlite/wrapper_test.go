@@ -2,20 +2,58 @@ package sqlite
 
 import (
 	"context"
-	"io/ioutil"
+	"embed"
+	"os"
 	"sync"
 	"testing"
 
-	"github.com/fortytw2/glaive/zlog"
+	"github.com/fortytw2/lounge"
+	"github.com/fortytw2/trek"
 )
 
-func TestDALExecutor(t *testing.T) {
-	log := zlog.New(ioutil.Discard)
+//go:embed testdata/schema1
+var schema embed.FS
 
-	db, err := NewMemory(&log, nil)
+func TestSQLiteMigrations(t *testing.T) {
+	log := lounge.NewDefaultLog(lounge.WithOutput(os.Stderr), lounge.WithDebugEnabled())
+	db, err := NewMemory(log)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
+	defer db.Close()
+
+	migrations, err := trek.GetMigrations(schema)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	err = trek.Migrate(db, log, migrations)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	row := db.QueryRow(context.TODO(), "SELECT count(*) FROM monkeys;")
+
+	var count int
+	err = row.Scan(&count)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if count != 0 {
+		t.Error("did not get zero monkeys")
+	}
+
+}
+
+func TestSQLiteSerializedExecutor(t *testing.T) {
+	log := lounge.NewDefaultLog(lounge.WithOutput(os.Stderr), lounge.WithDebugEnabled())
+
+	db, err := NewMemory(log)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	defer db.Close()
 
 	var wg sync.WaitGroup
 
@@ -64,6 +102,4 @@ func TestDALExecutor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	db.Stop()
 }

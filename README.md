@@ -29,7 +29,7 @@ var schema fs.FS
 
 func TestStuff(t *testing.T) {
     // export POSTGRES_DSN=xyz to use a local, already running, postgres instance.
-    db := pgtest.NewDB(t, schema, trek.NewMigrationFS(schema, "schema/"))
+    db := pgtest.NewDB(t, schema)
     defer db.Shutdown()
 
     for _, c := range cases {
@@ -44,7 +44,7 @@ func TestStuff(t *testing.T) {
 var schema fs.FS
 
 func main() {
-    db := postgresql.NewWrapper(os.Getenv("POSTGRES_DSN"), log.Printf, schema, pgmigrate.WithPattern("schema/"))
+    db := postgresql.NewWrapper(os.Getenv("POSTGRES_DSN"), lounge.NewDefaultLog())
 
     // use db for fun and profit.
 }

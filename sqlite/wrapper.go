@@ -4,24 +4,23 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"net/http"
 	"os"
+	"strings"
 
-	"github.com/fortytw2/glaive/dal"
-	"github.com/fortytw2/glaive/dal/sqlite/sqlitemigrate"
-	"github.com/fortytw2/glaive/zlog"
+	"github.com/fortytw2/lounge"
+	"github.com/fortytw2/trek"
 
-	"github.com/fortytw2/glaive/dal/dbtypes"
-	"github.com/fortytw2/glaive/random"
 	_ "github.com/mattn/go-sqlite3"
 )
+
+const asyncIDLength = 12
 
 // shared sqlite3 settings
 var stdDSN = "&cache=shared&_vacuum=2&_rt=0&_foreign_keys=1&_journal_mode=WAL"
 
 type SQLiteWrapper struct {
 	db  *sql.DB
-	log *zlog.Logger
+	log lounge.Log
 
 	execChan chan chan *execPayload
 	shutdown chan chan struct{}
@@ -32,27 +31,27 @@ type execPayload struct {
 	query  string
 	args   []interface{}
 
-	isInsert bool
-	ID       dbtypes.ID
-	err      error
+	scanFn trek.ScanFn
+
+	err error
 }
 
-func NewMemory(log *zlog.Logger, schema http.FileSystem) (*SQLiteWrapper, error) {
+func NewMemory(log lounge.Log) (*SQLiteWrapper, error) {
 	// TODO: generate a random filename for this, not sure if it matters
-	return new(log, "file:test.db?mode=memory"+stdDSN, schema)
+	return new(log, "file:test.db?mode=memory"+stdDSN)
 }
 
-func New(log *zlog.Logger, fileName string, schema http.FileSystem) (*SQLiteWrapper, error) {
+func New(log lounge.Log, fileName string) (*SQLiteWrapper, error) {
 	if _, err := os.Stat(fileName); os.IsNotExist(err) {
-		log.Warn().Msgf("no '%s' found, initializing a new database", fileName)
+		log.Infof("no '%s' found, initializing a new database", fileName)
 	} else {
-		log.Warn().Msgf("loading existing '%s'", fileName)
+		log.Infof("loading existing '%s'", fileName)
 	}
 
-	return new(log, fmt.Sprintf(`file:%s?mode=rwc%s`, fileName, stdDSN), schema)
+	return new(log, fmt.Sprintf(`file:%s?mode=rwc%s`, fileName, stdDSN))
 }
 
-func new(log *zlog.Logger, dsn string, schema http.FileSystem) (*SQLiteWrapper, error) {
+func new(log lounge.Log, dsn string) (*SQLiteWrapper, error) {
 	sqlDB, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, err
@@ -75,7 +74,7 @@ func new(log *zlog.Logger, dsn string, schema http.FileSystem) (*SQLiteWrapper, 
 		return nil, err
 	}
 
-	log.Info().Msgf("sqlite version: %s", version)
+	log.Infof("sqlite version: %s", version)
 
 	w := &SQLiteWrapper{
 		db:       sqlDB,
@@ -86,19 +85,10 @@ func new(log *zlog.Logger, dsn string, schema http.FileSystem) (*SQLiteWrapper, 
 
 	go w.executor()
 
-	if schema != nil {
-		err = sqlitemigrate.Migrate(sqlDB, log, schema)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		log.Warn().Msg("no migrations found")
-	}
-
 	return w, nil
 }
 
-func (w *SQLiteWrapper) Stop() {
+func (w *SQLiteWrapper) Close() {
 	waitForClose := make(chan struct{})
 
 	w.shutdown <- waitForClose
@@ -106,11 +96,15 @@ func (w *SQLiteWrapper) Stop() {
 	<-waitForClose
 }
 
-func (w *SQLiteWrapper) Query(ctx context.Context, scanner dal.ScanFn, query string, args ...interface{}) error {
-	w.log.Trace().Msgf("executing sql statement: %q with args %+v", query, args)
+func (w *SQLiteWrapper) Query(ctx context.Context, scanner trek.ScanFn, query string, args ...interface{}) error {
+	if isWriteQuery(query) {
+		return w.internalWriteQuery(scanner, query, args)
+	}
+
+	w.log.Debugf("executing sql statement: %q with args %+v", query, args)
 	rows, err := w.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		w.log.Error().Msgf("got error %q while executing %q with args %+v", err.Error(), query, args)
+		w.log.Errorf("got error %q while executing %q with args %+v", err.Error(), query, args)
 		return err
 	}
 	defer rows.Close()
@@ -131,57 +125,62 @@ func (w *SQLiteWrapper) Query(ctx context.Context, scanner dal.ScanFn, query str
 }
 
 func (w *SQLiteWrapper) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	w.log.Trace().Msgf("executing sql statement: %q with args %+v", query, args)
+	w.log.Debugf("executing sql statement: %q with args %+v", query, args)
 	return w.db.QueryRowContext(ctx, query, args...)
 }
 
 func (w *SQLiteWrapper) Exec(query string, args ...interface{}) error {
-	execID := random.ID()
+	execID := randomString(asyncIDLength)
 
-	w.log.Trace().Str("exec_id", execID).Msgf("dal.Exec called %q %v", query, args)
+	w.log.With(map[string]string{"exec_id": execID}).Debugf("dal.Exec called %q %v", query, args)
 	waitForReply := make(chan *execPayload)
 
-	w.log.Trace().Str("exec_id", execID).Msg("writing response chan to execChan")
+	w.log.With(map[string]string{"exec_id": execID}).Debugf("writing response chan to execChan")
 	// send it to be executed
 	w.execChan <- waitForReply
 
-	w.log.Trace().Str("exec_id", execID).Msg("writing payload to chan")
+	w.log.With(map[string]string{"exec_id": execID}).Debugf("writing payload to chan")
 	waitForReply <- &execPayload{
 		execID: execID,
 		query:  query,
 		args:   args,
 	}
 
-	w.log.Trace().Str("exec_id", execID).Msg("waiting for response")
+	w.log.With(map[string]string{"exec_id": execID}).Debugf("waiting for response")
 	// wait for the executor to inform us it's complete
 	execResp := <-waitForReply
 
 	return execResp.err
 }
 
-func (w *SQLiteWrapper) ExecWithReturnID(query string, args ...interface{}) (*dbtypes.ID, error) {
-	execID := random.ID()
+func (w *SQLiteWrapper) internalWriteQuery(scanFn trek.ScanFn, query string, args ...interface{}) error {
+	execID := randomString(asyncIDLength)
 
-	w.log.Trace().Str("exec_id", execID).Msgf("dal.Exec called %q %v", query, args)
+	w.log.With(map[string]string{"exec_id": execID}).Debugf("dal.Exec called %q %v", query, args)
 	waitForReply := make(chan *execPayload)
 
-	w.log.Trace().Str("exec_id", execID).Msg("writing response chan to execChan")
+	w.log.With(map[string]string{"exec_id": execID}).Debugf("writing response chan to execChan")
 	// send it to be executed
 	w.execChan <- waitForReply
 
-	w.log.Trace().Str("exec_id", execID).Msg("writing payload to chan")
+	w.log.With(map[string]string{"exec_id": execID}).Debugf("writing payload to chan")
 	waitForReply <- &execPayload{
-		execID:   execID,
-		query:    query,
-		isInsert: true,
-		args:     args,
+		execID: execID,
+		query:  query,
+		scanFn: scanFn,
+		args:   args,
 	}
 
-	w.log.Trace().Str("exec_id", execID).Msg("waiting for response")
+	w.log.With(map[string]string{"exec_id": execID}).Debugf("waiting for response")
 	// wait for the executor to inform us it's complete
 	execResp := <-waitForReply
 
-	return &execResp.ID, execResp.err
+	return execResp.err
+}
+
+func isWriteQuery(query string) bool {
+	lowerQ := strings.ToLower(query)
+	return strings.Contains(lowerQ, "insert") || strings.Contains(lowerQ, "update")
 }
 
 func (w *SQLiteWrapper) executor() {
@@ -191,44 +190,47 @@ func (w *SQLiteWrapper) executor() {
 			respChan <- struct{}{}
 			return
 		case x := <-w.execChan:
-			w.log.Trace().Msg("reading request from root channel")
+			w.log.Debugf("reading request from root channel")
 			sqlReq := <-x
 
-			w.log.Trace().Str("exec_id", sqlReq.execID).Msgf("executor running query %q %v", sqlReq.query, sqlReq.args)
-
-			res, err := w.db.Exec(sqlReq.query, sqlReq.args...)
-			if err != nil {
-				w.log.Debug().Str("exec_id", sqlReq.execID).Msgf("error in sql exec: %s", err)
-
-				x <- &execPayload{
-					err: err,
-				}
-				continue
-			}
-
-			if sqlReq.isInsert {
-				dbID, err := res.LastInsertId()
+			w.log.With(map[string]string{"exec_id": sqlReq.execID}).Debugf("executor running query %q %v", sqlReq.query, sqlReq.args)
+			if sqlReq.scanFn != nil {
+				rows, err := w.db.Query(sqlReq.query, sqlReq.args...)
 				if err != nil {
-					w.log.Trace().Str("exec_id", sqlReq.execID).Msgf("executor errored getting last insert id: %q", err)
+					w.log.With(map[string]string{"exec_id": sqlReq.execID}).Debugf("error in sql query: %s", err)
+
+					x <- &execPayload{
+						err: err,
+					}
 					continue
 				}
 
-				id := dbtypes.ID{Int64: uint64(dbID)}
-				w.log.Trace().Str("exec_id", sqlReq.execID).Msg("writing response back to channel")
-				x <- &execPayload{
-					ID:  id,
-					err: err,
+				w.log.With(map[string]string{"exec_id": sqlReq.execID}).Debugf("scanning update rows: %s", err)
+				for rows.Next() {
+					err := sqlReq.scanFn(rows)
+					if err != nil {
+						w.log.With(map[string]string{"exec_id": sqlReq.execID}).Debugf("writing response back to channel")
+						x <- &execPayload{
+							err: err,
+						}
+						break
+					}
 				}
 			} else {
-				w.log.Trace().Str("exec_id", sqlReq.execID).Msg("writing response back to channel")
+				_, err := w.db.Exec(sqlReq.query, sqlReq.args...)
+				if err != nil {
+					w.log.With(map[string]string{"exec_id": sqlReq.execID}).Debugf("error in sql exec: %s", err)
+
+					x <- &execPayload{
+						err: err,
+					}
+					continue
+				}
+				w.log.With(map[string]string{"exec_id": sqlReq.execID}).Debugf("writing response back to channel")
 				x <- &execPayload{
 					err: nil,
 				}
 			}
 		}
 	}
-}
-
-func (w *SQLiteWrapper) DB() *sql.DB {
-	return w.db
 }

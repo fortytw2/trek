@@ -4,29 +4,30 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"io/fs"
 	"time"
 
 	"github.com/fortytw2/lounge"
 	"github.com/fortytw2/trek"
-	"github.com/fortytw2/trek/postgresql/pgmigrate"
+
 	_ "github.com/lib/pq"
 )
 
-var meetsInterface trek.DB
-
 func init() {
-	meetsInterface = &Wrapper{}
+	var _ trek.DB = &Wrapper{}
 }
+
+const defaultAdvisoryLock = 42069
 
 type Wrapper struct {
 	log lounge.Log
+
+	migrationAdvisoryLock int
 
 	db         *sql.DB
 	sqlWrapper *sqlWrapper
 }
 
-func NewWrapper(pgDSN string, log lounge.Log, schema fs.FS, migrateOpts ...pgmigrate.OptionFn) (*Wrapper, error) {
+func NewWrapper(pgDSN string, log lounge.Log) (*Wrapper, error) {
 	db, err := sql.Open("postgres", pgDSN)
 	if err != nil {
 		return nil, err
@@ -54,19 +55,11 @@ func NewWrapper(pgDSN string, log lounge.Log, schema fs.FS, migrateOpts ...pgmig
 
 	log.Infof("postgresql version: %s", version)
 
-	if schema != nil {
-		err = pgmigrate.Migrate(db, log, schema, migrateOpts...)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		log.Errorf("no migrations found")
-	}
-
 	return &Wrapper{
-		log:        log,
-		db:         db,
-		sqlWrapper: newSQLWrapper(log, db),
+		log:                   log,
+		db:                    db,
+		migrationAdvisoryLock: defaultAdvisoryLock,
+		sqlWrapper:            newSQLWrapper(log, db),
 	}, nil
 }
 
