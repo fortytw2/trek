@@ -1,8 +1,16 @@
 github.com/fortytw2/dockertest v0.0.0-20181228171220-480d52efdffe h1:ZcSBgsXKsiO+Fews6o2FvSJe35heZSNgmoBpU/3QcfU=
 github.com/fortytw2/dockertest v0.0.0-20181228171220-480d52efdffe/go.mod h1:ol2Uw1BXqkhdz68AoQkye2+HtieiGfwXbEOwRTRpOnU=
+github.com/fortytw2/dockertest v0.0.0-20211014152632-a835544d90ce h1:RT7Xlsnw5rrnuDwJf69uKM/WlnG8bstdVXhZpIwE9hk=
+github.com/fortytw2/dockertest v0.0.0-20211014152632-a835544d90ce/go.mod h1:rWn7yYVtGDk9qOe1cSXOqnompZ7kEMUlcLA6SceJgZc=
 github.com/fortytw2/lounge v0.0.0-20210929174603-b7ce694cb600 h1:KyvTnqj+pFkGOJgurGRbnoIo9cMtLFS5BsFPQXqt0ZM=
 github.com/fortytw2/lounge v0.0.0-20210929174603-b7ce694cb600/go.mod h1:UF4a8fQkS6tEHH83nmLd9BXrFRmZmPQAAmogV1irsGU=
+github.com/fortytw2/lounge v0.0.0-20211222193458-766d5beb419b h1:AbV9+Whd7AyhWI/xcHXB+j8Ps2N7Unt04U+zUodKhdM=
+github.com/fortytw2/lounge v0.0.0-20211222193458-766d5beb419b/go.mod h1:UF4a8fQkS6tEHH83nmLd9BXrFRmZmPQAAmogV1irsGU=
 github.com/lib/pq v1.10.2 h1:AqzbZs4ZoCBp+GtejcpCpcxM3zlSMx29dXbUSeVtJb8=
 github.com/lib/pq v1.10.2/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
+github.com/lib/pq v1.10.4 h1:SO9z7FRPzA03QhHKJrH5BXA6HU1rS4V2nIVrrNC1iYk=
+github.com/lib/pq v1.10.4/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
 github.com/mattn/go-sqlite3 v1.14.8 h1:gDp86IdQsN/xWjIEmr9MF6o9mpksUgh0fu+9ByFxzIU=
 github.com/mattn/go-sqlite3 v1.14.8/go.mod h1:NyWgC/yNuGj7Q9rpYnZvas74GogHl5/Z4A/KQRfk6bU=
+github.com/mattn/go-sqlite3 v1.14.11 h1:gt+cp9c0XGqe9S/wAHTL3n/7MqY+siPWgWJgqdsFrzQ=
+github.com/mattn/go-sqlite3 v1.14.11/go.mod h1:NyWgC/yNuGj7Q9rpYnZvas74GogHl5/Z4A/KQRfk6bU=
